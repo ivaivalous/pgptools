@@ -2,6 +2,8 @@ package gpgtools
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -10,36 +12,47 @@ import (
 
 const (
 	identityRegex = `^gpg: key [A-Z0-9]+: "(?P<ID>.*?)".*$`
+	notFoundError = "key not found"
 )
 
 const (
 	PGPCommand          = "gpg"
 	ReceiveKeysArgument = "--recv-keys"
+	KeyServerArgument   = "--keyserver"
+	ExportArgument      = "--export"
+	KeyServer           = "pgp.mit.edu"
 	PGPTimeout          = 5 * time.Second
 )
 
 func GetPublicKey(fingerprint string) (string, error) {
-	command := exec.Command(PGPCommand, ReceiveKeysArgument, fingerprint)
-
-	// Prevent the command from potentially hanging
-	// by terminating it in case it fails to respond in
-	// five seconds
-	var timer *time.Timer
-	timer = time.AfterFunc(PGPTimeout, func() {
-		timer.Stop()
-		command.Process.Kill()
-	})
+	command := exec.Command(PGPCommand, KeyServerArgument, KeyServer, ReceiveKeysArgument, fingerprint)
+	timeCommandOut(command)
 
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return "", err
 	}
 
-	ID := extractID(string(output))
-	return ID, nil
+	ID, found := extractID(string(output))
+	if !found {
+		return "", errors.New(notFoundError)
+	}
+
+	return readKey(ID)
 }
 
-func extractID(gpgOutput string) string {
+func timeCommandOut(cmd *exec.Cmd) {
+	// Prevent the command from potentially hanging
+	// by terminating it in case it fails to respond in
+	// five seconds
+	var timer *time.Timer
+	timer = time.AfterFunc(PGPTimeout, func() {
+		timer.Stop()
+		(*cmd).Process.Kill()
+	})
+}
+
+func extractID(gpgOutput string) (ID string, found bool) {
 	re := regexp.MustCompile(identityRegex)
 	scanner := bufio.NewScanner(strings.NewReader(gpgOutput))
 
@@ -53,9 +66,22 @@ func extractID(gpgOutput string) string {
 					result[name] = match[i]
 				}
 			}
-			return result["ID"]
+			return result["ID"], true
 		}
 	}
 
-	return ""
+	return "", false
+}
+
+func readKey(ID string) (string, error) {
+	IDWrapped := fmt.Sprintf(`"%s"`, ID)
+	command := exec.Command(PGPCommand, ExportArgument, "-a", IDWrapped)
+	timeCommandOut(command)
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+
+	return string(output), nil
 }
