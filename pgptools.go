@@ -1,4 +1,4 @@
-package gpgtools
+package pgptools
 
 import (
 	"errors"
