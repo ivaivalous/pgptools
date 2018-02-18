@@ -20,12 +20,11 @@ const (
 	ReceiveKeysArgument = "--recv-keys"
 	KeyServerArgument   = "--keyserver"
 	ExportArgument      = "--export"
-	KeyServer           = "pgp.mit.edu"
 	PGPTimeout          = 5 * time.Second
 )
 
-func GetPublicKey(fingerprint string) (string, error) {
-	command := exec.Command(PGPCommand, KeyServerArgument, KeyServer, ReceiveKeysArgument, fingerprint)
+func GetPublicKey(keyServer, fingerprint string) (string, error) {
+	command := exec.Command(PGPCommand, KeyServerArgument, keyServer, ReceiveKeysArgument, fingerprint)
 	timeCommandOut(command)
 
 	output, err := command.CombinedOutput()
