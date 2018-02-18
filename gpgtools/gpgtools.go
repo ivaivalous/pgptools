@@ -1,86 +1,34 @@
 package gpgtools
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"os/exec"
-	"regexp"
-	"strings"
-	"time"
+	"io/ioutil"
+	"net/http"
 )
 
 const (
-	identityRegex = `^gpg: key [A-Z0-9]+: "(?P<ID>.*?)".*$`
-	notFoundError = "key not found"
+	GetAddress = "%s/pks/lookup?op=get&search=0x%s&options=mr"
 )
 
-const (
-	PGPCommand          = "gpg"
-	ReceiveKeysArgument = "--recv-keys"
-	KeyServerArgument   = "--keyserver"
-	ExportArgument      = "--export"
-	PGPTimeout          = 5 * time.Second
-)
-
+// GetPublicKey retrieves one's public key from a selected
+// SKS key server via the key's fingerprint
 func GetPublicKey(keyServer, fingerprint string) (string, error) {
-	command := exec.Command(PGPCommand, KeyServerArgument, keyServer, ReceiveKeysArgument, fingerprint)
-	timeCommandOut(command)
+	URL := fmt.Sprintf(GetAddress, keyServer, fingerprint)
+	response, err := http.Get(URL)
+	if err != nil {
+		return "", err
+	}
+	if response.StatusCode == http.StatusNotFound {
+		return "", errors.New("not found")
+	}
 
-	output, err := command.CombinedOutput()
+	defer response.Body.Close()
+
+	content, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return "", err
 	}
 
-	ID, found := extractID(string(output))
-	if !found {
-		return "", errors.New(notFoundError)
-	}
-
-	return readKey(ID)
-}
-
-func timeCommandOut(cmd *exec.Cmd) {
-	// Prevent the command from potentially hanging
-	// by terminating it in case it fails to respond in
-	// five seconds
-	var timer *time.Timer
-	timer = time.AfterFunc(PGPTimeout, func() {
-		timer.Stop()
-		(*cmd).Process.Kill()
-	})
-}
-
-func extractID(gpgOutput string) (ID string, found bool) {
-	re := regexp.MustCompile(identityRegex)
-	scanner := bufio.NewScanner(strings.NewReader(gpgOutput))
-
-	for scanner.Scan() {
-		if re.MatchString(scanner.Text()) {
-			match := re.FindStringSubmatch(scanner.Text())
-			result := make(map[string]string)
-
-			for i, name := range re.SubexpNames() {
-				if i != 0 && name != "" {
-					result[name] = match[i]
-				}
-			}
-			return result["ID"], true
-		}
-	}
-
-	return "", false
-}
-
-func readKey(ID string) (string, error) {
-	IDWrapped := fmt.Sprintf(`"%s"`, ID)
-	command := exec.Command(PGPCommand, ExportArgument, "-a", IDWrapped)
-	timeCommandOut(command)
-
-	output, err := command.CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-
-	return string(output), nil
+	return string(content), nil
 }

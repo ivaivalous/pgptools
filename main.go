@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	keyServer := "pgp.mit.edu"
+	keyServer := "https://pgp.mit.edu"
 	fingerprint := "AA967D520AF181BBC86725B3AB9F0F4F2D6A49E4"
 	key, err := gpgtools.GetPublicKey(keyServer, fingerprint)
 	if err != nil {
