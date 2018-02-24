@@ -19,7 +19,7 @@ func GetPublicKey(keyServer, fingerprint string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if response.StatusCode == http.StatusNotFound {
+	if response.StatusCode != http.StatusOK {
 		return "", errors.New("not found")
 	}
 
