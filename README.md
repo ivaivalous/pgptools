@@ -1,2 +1,3 @@
-# gpgtools
-GPG-related tools for Go
+# pgptools
+
+PGP-related tools for Go
